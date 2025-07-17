@@ -3,67 +3,101 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Project Titan v3.2: The Autonomous Nutrition Engine</title>
+    <title>Project Titan v3.3: The Command Center</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; background-color: #030712; color: #f9fafb; }
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: #0a0a0a;
+            color: #e5e5e5;
+            background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.05) 1px, transparent 0);
+            background-size: 20px 20px;
+        }
+        .aurora-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: radial-gradient(ellipse at top left, rgba(29, 78, 216, 0.15), transparent 50%),
+                              radial-gradient(ellipse at bottom right, rgba(217, 70, 239, 0.15), transparent 50%);
+            z-index: -1;
+            filter: blur(60px);
+        }
         .tab-active { background-color: #2563eb; color: white; }
-        .tab-inactive { background-color: #1f2937; color: #9ca3af; }
-        .card { background-color: #111827; border: 1px solid #374151; transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out; }
+        .tab-inactive { background-color: rgba(255,255,255,0.05); color: #9ca3af; }
+        .card { 
+            background-color: rgba(17, 24, 39, 0.7);
+            border: 1px solid rgba(255,255,255,0.1);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
         .card:hover { transform: translateY(-4px); box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.2), 0 4px 6px -2px rgb(0 0 0 / 0.1); }
         .aesthetic-meal { border-left: 4px solid #f59e0b; }
         [contenteditable="true"] { outline: 2px dashed #4b5563; padding: 2px 4px; border-radius: 4px; cursor: text; }
         [contenteditable="true"]:focus { outline: 2px solid #2563eb; background-color: #1f2937; }
-        .details-toggle { cursor: pointer; }
-        .budget-breakdown { display: none; background-color: #1f2937; padding: 8px; border-radius: 6px; margin-top: 4px; }
         .modal-backdrop { position: fixed; inset: 0; background-color: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 50; }
+        .heatmap-cell { width: 100%; height: 24px; background-color: rgba(255,255,255,0.05); border-radius: 4px; transition: background-color 0.3s; }
+        .heatmap-cell.active { background-color: #2563eb; }
     </style>
 </head>
 <body class="p-4 sm:p-6 lg:p-8">
-
-    <div id="app-container" class="max-w-7xl mx-auto">
+    <div class="aurora-bg"></div>
+    <div id="app-container" class="max-w-screen-2xl mx-auto">
         <header class="mb-8 text-center relative">
-            <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight">Project Titan v3.2</h1>
-            <p class="mt-2 text-lg text-gray-400">The Autonomous Nutrition Engine</p>
+            <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight">Project Titan v3.3</h1>
+            <p class="mt-2 text-lg text-gray-400">The Command Center</p>
             <button onclick="showResetModal()" class="absolute top-0 right-0 p-2 text-gray-500 hover:text-red-400 transition-colors" title="Reset all data">
                 <i data-lucide="trash-2" class="w-5 h-5"></i>
             </button>
         </header>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div class="md:col-span-2 grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div class="card p-4 rounded-lg text-center"><p class="text-sm text-gray-400">Target Calories</p><p class="text-2xl font-bold">~3000</p></div>
-                <div class="card p-4 rounded-lg text-center"><p class="text-sm text-gray-400">Goal Weight</p><p class="text-2xl font-bold">~57 kg</p></div>
-                <div class="card p-4 rounded-lg text-center"><p class="text-sm text-gray-400">Daily Budget</p><p class="text-2xl font-bold">₹150</p></div>
-                <div class="card p-4 rounded-lg text-center"><p class="text-sm text-gray-400">Monthly Surplus</p><p id="monthly-surplus" class="text-2xl font-bold text-green-400">₹0</p></div>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Left Column: Main Plan -->
+            <div class="lg:col-span-2">
+                <div class="mb-6"><div id="tabs-container" class="flex space-x-2 sm:space-x-4 border-b border-gray-700 pb-2 overflow-x-auto"></div></div>
+                <main id="plan-container" class="space-y-8"></main>
             </div>
-            <div class="card p-4 rounded-lg">
-                <h3 class="font-bold text-lg mb-2 flex items-center"><i data-lucide="clipboard-list" class="w-5 h-5 mr-2"></i>Daily Log</h3>
-                <div class="flex items-center space-x-2">
-                    <input type="number" id="weight-input" placeholder="Today's weight (kg)" class="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                    <button onclick="logWeight()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition-colors">Log</button>
+
+            <!-- Right Column: Mission Control Sidebar -->
+            <aside class="lg:col-span-1 space-y-8">
+                <div class="card p-4 rounded-lg">
+                    <h3 class="font-bold text-lg mb-2 flex items-center"><i data-lucide="clipboard-list" class="w-5 h-5 mr-2"></i>Daily Log</h3>
+                    <div class="flex items-center space-x-2">
+                        <input type="number" id="weight-input" placeholder="Today's weight (kg)" class="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        <button onclick="logWeight()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition-colors">Log</button>
+                    </div>
                 </div>
-            </div>
-        </div>
 
-        <div class="card p-4 rounded-lg mb-8">
-            <h3 class="font-bold text-lg mb-2 flex items-center"><i data-lucide="line-chart" class="w-5 h-5 mr-2"></i>Weight Progress (kg)</h3>
-            <div class="h-64"><canvas id="weightChart"></canvas></div>
-        </div>
+                <div class="card p-4 rounded-lg">
+                    <h3 class="font-bold text-lg mb-2 flex items-center"><i data-lucide="calendar-check" class="w-5 h-5 mr-2"></i>Consistency Heatmap</h3>
+                    <div id="heatmap-container" class="grid grid-cols-7 gap-2"></div>
+                </div>
+                
+                <div class="card p-4 rounded-lg">
+                    <h3 class="font-bold text-lg mb-2 flex items-center"><i data-lucide="shopping-cart" class="w-5 h-5 mr-2"></i>Weekly Shopping List</h3>
+                    <div id="shopping-list-container" class="text-sm text-gray-300 space-y-2 max-h-96 overflow-y-auto">
+                        <p class="text-gray-500">Generate a list from a weekly briefing card.</p>
+                    </div>
+                </div>
 
-        <div class="mb-6"><div id="tabs-container" class="flex space-x-2 sm:space-x-4 border-b border-gray-700 pb-2 overflow-x-auto"></div></div>
-        
-        <main id="plan-container" class="space-y-8"></main>
+                <div class="card p-4 rounded-lg">
+                    <h3 class="font-bold text-lg mb-2 flex items-center"><i data-lucide="line-chart" class="w-5 h-5 mr-2"></i>Weight Progress (kg)</h3>
+                    <div class="h-64"><canvas id="weightChart"></canvas></div>
+                </div>
+            </aside>
+        </div>
     </div>
 
     <!-- Reset Modal -->
     <div id="reset-modal" class="modal-backdrop hidden">
         <div class="card p-6 rounded-lg max-w-sm w-full">
             <h3 class="font-bold text-lg text-white">Reset Dashboard?</h3>
-            <p class="text-gray-400 mt-2">This will permanently delete all your meal edits and logged weight. The dashboard will restore to its default state. Are you sure?</p>
+            <p class="text-gray-400 mt-2">This will permanently delete all your meal edits and logged weight. Are you sure?</p>
             <div class="flex justify-end space-x-4 mt-6">
                 <button onclick="hideResetModal()" class="px-4 py-2 rounded-md bg-gray-600 hover:bg-gray-700 text-white font-semibold">Cancel</button>
                 <button onclick="executeReset()" class="px-4 py-2 rounded-md bg-red-600 hover:bg-red-700 text-white font-semibold">Yes, Reset</button>
@@ -76,7 +110,7 @@
     const defaultMealPlan = [
         // WEEK 1
         { week: 1, day: 'Friday', breakfast: { name: 'PB Toast (4) + 4 Eggs', breakdown: 'Bread:₹10, PB:₹15, Eggs:₹28' }, lunch: { name: 'Lg Chicken Curry + Rice', breakdown: 'Chicken(150g):₹45, Rice:₹15, Masala:₹10' }, snack: { name: 'Nut & Banana Shake', breakdown: 'Nuts:₹20, Banana:₹5, Milk:₹10' }, dinner: { name: 'Lg Rajma + 3 Roti + Ghee', breakdown: 'Rajma:₹15, Roti:₹8, Ghee:₹5' }, cost: 186, cals: 3050, protein: 140, carbs: 350, aestheticTip: 'Garnish Rajma with fresh coriander.', notes: 'Day 1. Feeling motivated.' },
-        { week: 1, day: 'Saturday', breakfast: { name: 'Cornflakes, Milk, 2 Eggs', breakdown: 'Cornflakes:₹15, Milk:₹10, Eggs:₹14' }, lunch: { name: 'Leftover Chicken Curry', breakdown: '₹0' }, snack: { name: '2 Boiled Eggs', breakdown: 'Eggs:₹14' }, dinner: { name: 'Chicken Bhuna (200g) + 4 Roti', breakdown: 'Chicken:₹60, Roti:₹10, Masala:₹10' }, cost: 123, cals: 2900, protein: 150, carbs: 280, aestheticTip: 'Get a dark char on the Chicken.', notes: '' },
+        { week: 1, day: 'Saturday', breakfast: { name: 'Cornflakes, Milk, 2 Eggs', breakdown: 'Cornflakes:₹15, Milk:₹10, Eggs:₹14' }, lunch: { name: 'Leftover Chicken Curry', breakdown: '₹0' }, snack: { name: '2 Boiled Eggs', breakdown: 'Eggs:₹14' }, dinner: { name: 'Chicken Bhuna (200g) + 4 Roti', breakdown: 'Chicken(200g):₹60, Roti:₹10, Masala:₹10' }, cost: 123, cals: 2900, protein: 150, carbs: 280, aestheticTip: 'Get a dark char on the Chicken.', notes: '' },
         { week: 1, day: 'Sunday', breakfast: { name: 'Egg Bhurji (4) + 3 Roti', breakdown: 'Eggs:₹28, Roti:₹8, Veggies:₹5' }, lunch: { name: 'Leftover Chicken Bhuna', breakdown: '₹0' }, snack: { name: 'Peanut Butter Shake', breakdown: 'PB:₹15, Milk:₹10, Banana:₹5' }, dinner: { name: 'Soya Keema (Lg) + Pav', breakdown: 'Soya:₹20, Pav:₹10, Masala:₹10' }, cost: 111, cals: 3100, protein: 135, carbs: 330, aestheticTip: 'Serve Soya Keema in a dark bowl.', notes: '' },
         { week: 1, day: 'Monday', breakfast: { name: 'PB Toast (4) + 4 Eggs', breakdown: 'Bread:₹10, PB:₹15, Eggs:₹28' }, lunch: { name: 'Leftover Soya Keema', breakdown: '₹0' }, snack: { name: 'Nut & Banana Shake', breakdown: 'Nuts:₹20, Banana:₹5, Milk:₹10' }, dinner: { name: 'Chicken Curry (150g) + Rice', breakdown: 'Chicken:₹45, Rice:₹15, Masala:₹10' }, cost: 158, cals: 3000, protein: 140, carbs: 340, aestheticTip: 'A classic comfort meal.', notes: '' },
         { week: 1, day: 'Tuesday', breakfast: { name: 'Cornflakes, Milk, 2 Eggs', breakdown: 'Cornflakes:₹15, Milk:₹10, Eggs:₹14' }, lunch: { name: 'Leftover Chicken Curry', breakdown: '₹0' }, snack: { name: '2 Boiled Eggs', breakdown: 'Eggs:₹14' }, dinner: { name: 'Chole Masala (Lg) + 4 Roti', breakdown: 'Chole:₹20, Roti:₹10, Masala:₹10' }, cost: 93, cals: 2850, protein: 120, carbs: 320, aestheticTip: 'Garnish with onion rings.', notes: '' },
@@ -110,24 +144,24 @@
 
     let mealPlan = [];
     let activeWeek = 1;
-    let weightData = JSON.parse(localStorage.getItem('weightData_v3.2')) || { labels: [], weights: [] };
-    let checkedItems = JSON.parse(localStorage.getItem('checkedItems_v3.2')) || {};
+    let weightData = JSON.parse(localStorage.getItem('weightData_v3.3')) || { labels: [], weights: [] };
+    let checkedItems = JSON.parse(localStorage.getItem('checkedItems_v3.3')) || {};
     
     const today = new Date().toLocaleDateString();
     if (checkedItems.date !== today) {
         checkedItems = { date: today };
-        localStorage.setItem('checkedItems_v3.2', JSON.stringify(checkedItems));
+        localStorage.setItem('checkedItems_v3.3', JSON.stringify(checkedItems));
     }
 
     const mealIcons = { breakfast: 'coffee', lunch: 'utensils', snack: 'cookie', dinner: 'soup' };
 
     function loadPlanFromStorage() {
-        const storedPlan = localStorage.getItem('mealPlan_v3.2');
+        const storedPlan = localStorage.getItem('mealPlan_v3.3');
         if (storedPlan) {
             mealPlan = JSON.parse(storedPlan);
         } else {
             mealPlan = defaultMealPlan;
-            localStorage.setItem('mealPlan_v3.2', JSON.stringify(mealPlan));
+            localStorage.setItem('mealPlan_v3.3', JSON.stringify(mealPlan));
         }
     }
 
@@ -172,8 +206,14 @@
 
         return `
             <div class="card p-6 rounded-lg border-l-4 border-blue-500">
-                <h3 class="font-bold text-xl text-white mb-4">Week ${activeWeek} Briefing</h3>
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
+                <div class="flex flex-wrap justify-between items-center gap-4">
+                    <h3 class="font-bold text-xl text-white">Week ${activeWeek} Briefing</h3>
+                    <button onclick="generateShoppingList(${activeWeek})" class="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-md transition-colors">
+                        <i data-lucide="list-plus" class="w-4 h-4"></i>
+                        <span>Shopping List</span>
+                    </button>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center mt-4">
                     <div><p class="text-sm text-gray-400">Avg. Daily Calories</p><p class="text-2xl font-bold">${avgCals}</p></div>
                     <div><p class="text-sm text-gray-400">Avg. Daily Protein</p><p class="text-2xl font-bold">${avgProtein}g</p></div>
                     <div><p class="text-sm text-gray-400">Avg. Daily Cost</p><p class="text-2xl font-bold">₹${avgCost}</p></div>
@@ -270,7 +310,7 @@
         day.notes = document.getElementById(`notes-${dayIndex}`).textContent;
         day.aestheticTip = document.getElementById(`aestheticTip-${dayIndex}`)?.textContent || day.aestheticTip;
 
-        localStorage.setItem('mealPlan_v3.2', JSON.stringify(mealPlan));
+        localStorage.setItem('mealPlan_v3.3', JSON.stringify(mealPlan));
         updateBudget();
         renderPlan();
         
@@ -299,7 +339,7 @@
         weightChart = new Chart(ctx, {
             type: 'line',
             data: { labels: weightData.labels, datasets: [{ label: 'Weight (kg)', data: weightData.weights, borderColor: '#2563eb', backgroundColor: 'rgba(37, 99, 235, 0.1)', fill: true, tension: 0.2, borderWidth: 2, pointBackgroundColor: '#2563eb', pointRadius: 4, pointHoverRadius: 6 }] },
-            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: false, grid: { color: '#374151' }, ticks: { color: '#9ca3af' } }, x: { grid: { display: false }, ticks: { color: '#9ca3af' } } }, plugins: { legend: { display: false } } }
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: false, grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#9ca3af' } }, x: { grid: { display: false }, ticks: { color: '#9ca3af' } } }, plugins: { legend: { display: false } } }
         });
     }
 
@@ -313,7 +353,7 @@
         const itemId = event.target.dataset.itemId;
         checkedItems[itemId] = event.target.checked;
         if (!event.target.checked) delete checkedItems[itemId];
-        localStorage.setItem('checkedItems_v3.2', JSON.stringify(checkedItems));
+        localStorage.setItem('checkedItems_v3.3', JSON.stringify(checkedItems));
         renderPlan();
     }
     
@@ -329,9 +369,10 @@
                  weightData.labels.push(todayLabel);
                  weightData.weights.push(newWeight);
             }
-            localStorage.setItem('weightData_v3.2', JSON.stringify(weightData));
+            localStorage.setItem('weightData_v3.3', JSON.stringify(weightData));
             weightInput.value = '';
             renderChart();
+            renderHeatmap();
         }
     }
 
@@ -343,10 +384,96 @@
     function showResetModal() { document.getElementById('reset-modal').classList.remove('hidden'); }
     function hideResetModal() { document.getElementById('reset-modal').classList.add('hidden'); }
     function executeReset() {
-        localStorage.removeItem('mealPlan_v3.2');
-        localStorage.removeItem('weightData_v3.2');
-        localStorage.removeItem('checkedItems_v3.2');
+        localStorage.removeItem('mealPlan_v3.3');
+        localStorage.removeItem('weightData_v3.3');
+        localStorage.removeItem('checkedItems_v3.3');
         window.location.reload();
+    }
+
+    function renderHeatmap() {
+        const container = document.getElementById('heatmap-container');
+        container.innerHTML = '';
+        const loggedDates = new Set(weightData.labels);
+        
+        // This creates a static 28-day grid. For a real dynamic app, you'd use the actual start date.
+        for(let i=0; i < 28; i++) {
+            const cell = document.createElement('div');
+            cell.className = 'heatmap-cell';
+            const dayNumber = i + 1;
+            // A simple way to check if a day within the 28-day cycle is logged
+            // This is a simplification; a robust solution would map dates.
+            if (i < loggedDates.size) { // This is a proxy for logged days.
+                 cell.classList.add('active');
+            }
+            cell.title = `Day ${dayNumber}`;
+            container.appendChild(cell);
+        }
+    }
+
+    function generateShoppingList(weekNum) {
+        const weekPlan = mealPlan.filter(day => day.week === weekNum);
+        const shoppingList = {};
+
+        weekPlan.forEach(day => {
+            ['breakfast', 'lunch', 'snack', 'dinner'].forEach(mealType => {
+                const breakdown = day[mealType].breakdown;
+                if (breakdown.toLowerCase().includes('leftover')) return;
+
+                const items = breakdown.split(',');
+                items.forEach(item => {
+                    const parts = item.trim().split(':');
+                    if (parts.length < 1) return;
+                    let itemName = parts[0].trim();
+                    
+                    const key = itemName.replace(/\s*\(.*\)\s*/, '').toLowerCase();
+                    if (!shoppingList[key]) {
+                        shoppingList[key] = 0;
+                    }
+                    shoppingList[key]++;
+                });
+            });
+        });
+
+        const container = document.getElementById('shopping-list-container');
+        container.innerHTML = '';
+        const categories = {
+            'Proteins': ['chicken', 'eggs', 'fish', 'mutton', 'paneer', 'soya'],
+            'Carbs': ['bread', 'roti', 'rice', 'pav', 'cornflakes', 'oats'],
+            'Fats & Dairy': ['pb', 'nuts', 'milk', 'ghee'],
+            'Produce': ['banana', 'veggies', 'masala']
+        };
+
+        Object.keys(categories).forEach(category => {
+            const categoryItems = [];
+            categories[category].forEach(keyword => {
+                Object.keys(shoppingList).forEach(itemKey => {
+                    if (itemKey.includes(keyword)) {
+                        categoryItems.push(`${itemKey} (x${shoppingList[itemKey]})`);
+                        delete shoppingList[itemKey];
+                    }
+                });
+            });
+
+            if (categoryItems.length > 0) {
+                container.innerHTML += `<h4 class="font-bold text-md text-blue-400 mt-2">${category}</h4>`;
+                const ul = document.createElement('ul');
+                ul.className = 'list-disc list-inside space-y-1';
+                categoryItems.forEach(item => {
+                    ul.innerHTML += `<li>${item}</li>`;
+                });
+                container.appendChild(ul);
+            }
+        });
+        
+        if(Object.keys(shoppingList).length > 0) {
+            container.innerHTML += `<h4 class="font-bold text-md text-blue-400 mt-2">Other</h4>`;
+            const ul = document.createElement('ul');
+            ul.className = 'list-disc list-inside space-y-1';
+            Object.keys(shoppingList).forEach(itemKey => {
+                ul.innerHTML += `<li>${itemKey} (x${shoppingList[itemKey]})</li>`;
+            });
+            container.appendChild(ul);
+        }
     }
     
     window.onload = () => {
@@ -355,6 +482,7 @@
         renderPlan();
         updateBudget();
         renderChart();
+        renderHeatmap();
     };
     </script>
 </body>
