@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Titan v3.2: The Autonomous Nutrition Engine</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #030712; color: #f9fafb; }
+        .tab-active { background-color: #2563eb; color: white; }
+        .tab-inactive { background-color: #1f2937; color: #9ca3af; }
+        .card { background-color: #111827; border: 1px solid #374151; transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out; }
+        .card:hover { transform: translateY(-4px); box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.2), 0 4px 6px -2px rgb(0 0 0 / 0.1); }
+        .aesthetic-meal { border-left: 4px solid #f59e0b; }
+        [contenteditable="true"] { outline: 2px dashed #4b5563; padding: 2px 4px; border-radius: 4px; cursor: text; }
+        [contenteditable="true"]:focus { outline: 2px solid #2563eb; background-color: #1f2937; }
+        .details-toggle { cursor: pointer; }
+        .budget-breakdown { display: none; background-color: #1f2937; padding: 8px; border-radius: 6px; margin-top: 4px; }
+        .modal-backdrop { position: fixed; inset: 0; background-color: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 50; }
+    </style>
+</head>
+<body class="p-4 sm:p-6 lg:p-8">
+
+    <div id="app-container" class="max-w-7xl mx-auto">
+        <header class="mb-8 text-center relative">
+            <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight">Project Titan v3.2</h1>
+            <p class="mt-2 text-lg text-gray-400">The Autonomous Nutrition Engine</p>
+            <button onclick="showResetModal()" class="absolute top-0 right-0 p-2 text-gray-500 hover:text-red-400 transition-colors" title="Reset all data">
+                <i data-lucide="trash-2" class="w-5 h-5"></i>
+            </button>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="md:col-span-2 grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div class="card p-4 rounded-lg text-center"><p class="text-sm text-gray-400">Target Calories</p><p class="text-2xl font-bold">~3000</p></div>
+                <div class="card p-4 rounded-lg text-center"><p class="text-sm text-gray-400">Goal Weight</p><p class="text-2xl font-bold">~57 kg</p></div>
+                <div class="card p-4 rounded-lg text-center"><p class="text-sm text-gray-400">Daily Budget</p><p class="text-2xl font-bold">₹150</p></div>
+                <div class="card p-4 rounded-lg text-center"><p class="text-sm text-gray-400">Monthly Surplus</p><p id="monthly-surplus" class="text-2xl font-bold text-green-400">₹0</p></div>
+            </div>
+            <div class="card p-4 rounded-lg">
+                <h3 class="font-bold text-lg mb-2 flex items-center"><i data-lucide="clipboard-list" class="w-5 h-5 mr-2"></i>Daily Log</h3>
+                <div class="flex items-center space-x-2">
+                    <input type="number" id="weight-input" placeholder="Today's weight (kg)" class="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                    <button onclick="logWeight()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition-colors">Log</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card p-4 rounded-lg mb-8">
+            <h3 class="font-bold text-lg mb-2 flex items-center"><i data-lucide="line-chart" class="w-5 h-5 mr-2"></i>Weight Progress (kg)</h3>
+            <div class="h-64"><canvas id="weightChart"></canvas></div>
+        </div>
+
+        <div class="mb-6"><div id="tabs-container" class="flex space-x-2 sm:space-x-4 border-b border-gray-700 pb-2 overflow-x-auto"></div></div>
+        
+        <main id="plan-container" class="space-y-8"></main>
+    </div>
+
+    <!-- Reset Modal -->
+    <div id="reset-modal" class="modal-backdrop hidden">
+        <div class="card p-6 rounded-lg max-w-sm w-full">
+            <h3 class="font-bold text-lg text-white">Reset Dashboard?</h3>
+            <p class="text-gray-400 mt-2">This will permanently delete all your meal edits and logged weight. The dashboard will restore to its default state. Are you sure?</p>
+            <div class="flex justify-end space-x-4 mt-6">
+                <button onclick="hideResetModal()" class="px-4 py-2 rounded-md bg-gray-600 hover:bg-gray-700 text-white font-semibold">Cancel</button>
+                <button onclick="executeReset()" class="px-4 py-2 rounded-md bg-red-600 hover:bg-red-700 text-white font-semibold">Yes, Reset</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // --- DATA ---
+    const defaultMealPlan = [
+        // WEEK 1
+        { week: 1, day: 'Friday', breakfast: { name: 'PB Toast (4) + 4 Eggs', breakdown: 'Bread:₹10, PB:₹15, Eggs:₹28' }, lunch: { name: 'Lg Chicken Curry + Rice', breakdown: 'Chicken(150g):₹45, Rice:₹15, Masala:₹10' }, snack: { name: 'Nut & Banana Shake', breakdown: 'Nuts:₹20, Banana:₹5, Milk:₹10' }, dinner: { name: 'Lg Rajma + 3 Roti + Ghee', breakdown: 'Rajma:₹15, Roti:₹8, Ghee:₹5' }, cost: 186, cals: 3050, protein: 140, carbs: 350, aestheticTip: 'Garnish Rajma with fresh coriander.', notes: 'Day 1. Feeling motivated.' },
+        { week: 1, day: 'Saturday', breakfast: { name: 'Cornflakes, Milk, 2 Eggs', breakdown: 'Cornflakes:₹15, Milk:₹10, Eggs:₹14' }, lunch: { name: 'Leftover Chicken Curry', breakdown: '₹0' }, snack: { name: '2 Boiled Eggs', breakdown: 'Eggs:₹14' }, dinner: { name: 'Chicken Bhuna (200g) + 4 Roti', breakdown: 'Chicken:₹60, Roti:₹10, Masala:₹10' }, cost: 123, cals: 2900, protein: 150, carbs: 280, aestheticTip: 'Get a dark char on the Chicken.', notes: '' },
+        { week: 1, day: 'Sunday', breakfast: { name: 'Egg Bhurji (4) + 3 Roti', breakdown: 'Eggs:₹28, Roti:₹8, Veggies:₹5' }, lunch: { name: 'Leftover Chicken Bhuna', breakdown: '₹0' }, snack: { name: 'Peanut Butter Shake', breakdown: 'PB:₹15, Milk:₹10, Banana:₹5' }, dinner: { name: 'Soya Keema (Lg) + Pav', breakdown: 'Soya:₹20, Pav:₹10, Masala:₹10' }, cost: 111, cals: 3100, protein: 135, carbs: 330, aestheticTip: 'Serve Soya Keema in a dark bowl.', notes: '' },
+        { week: 1, day: 'Monday', breakfast: { name: 'PB Toast (4) + 4 Eggs', breakdown: 'Bread:₹10, PB:₹15, Eggs:₹28' }, lunch: { name: 'Leftover Soya Keema', breakdown: '₹0' }, snack: { name: 'Nut & Banana Shake', breakdown: 'Nuts:₹20, Banana:₹5, Milk:₹10' }, dinner: { name: 'Chicken Curry (150g) + Rice', breakdown: 'Chicken:₹45, Rice:₹15, Masala:₹10' }, cost: 158, cals: 3000, protein: 140, carbs: 340, aestheticTip: 'A classic comfort meal.', notes: '' },
+        { week: 1, day: 'Tuesday', breakfast: { name: 'Cornflakes, Milk, 2 Eggs', breakdown: 'Cornflakes:₹15, Milk:₹10, Eggs:₹14' }, lunch: { name: 'Leftover Chicken Curry', breakdown: '₹0' }, snack: { name: '2 Boiled Eggs', breakdown: 'Eggs:₹14' }, dinner: { name: 'Chole Masala (Lg) + 4 Roti', breakdown: 'Chole:₹20, Roti:₹10, Masala:₹10' }, cost: 93, cals: 2850, protein: 120, carbs: 320, aestheticTip: 'Garnish with onion rings.', notes: '' },
+        { week: 1, day: 'Wednesday', breakfast: { name: 'Egg Bhurji (4) + 3 Roti', breakdown: 'Eggs:₹28, Roti:₹8, Veggies:₹5' }, lunch: { name: 'Leftover Chole', breakdown: '₹0' }, snack: { name: 'Peanut Butter Shake', breakdown: 'PB:₹15, Milk:₹10, Banana:₹5' }, dinner: { name: 'Egg Curry (4 eggs) + Rice', breakdown: 'Eggs:₹28, Rice:₹15, Masala:₹10' }, cost: 124, cals: 2950, protein: 130, carbs: 310, aestheticTip: 'Slice eggs to show the yolk.', notes: '' },
+        { week: 1, day: 'Thursday', breakfast: { name: 'PB Toast (4) + 4 Eggs', breakdown: 'Bread:₹10, PB:₹15, Eggs:₹28' }, lunch: { name: 'Leftover Egg Curry', breakdown: '₹0' }, snack: { name: 'Nut & Banana Shake', breakdown: 'Nuts:₹20, Banana:₹5, Milk:₹10' }, dinner: { name: 'Chicken Bhuna (200g) + 4 Roti', breakdown: 'Chicken:₹60, Roti:₹10, Masala:₹10' }, cost: 171, cals: 3000, protein: 145, carbs: 300, aestheticTip: 'A dry curry looks good.', notes: '' },
+        // WEEK 2
+        { week: 2, day: 'Friday', breakfast: { name: 'Egg Bhurji (4) + 3 Roti', breakdown: 'Eggs:₹28, Roti:₹8, Veggies:₹5' }, lunch: { name: 'Leftover Chicken Bhuna', breakdown: '₹0' }, snack: { name: 'Peanut Butter Shake', breakdown: 'PB:₹15, Milk:₹10, Banana:₹5' }, dinner: { name: 'Fish Curry (150g) + Rice', breakdown: 'Fish:₹55, Rice:₹15, Masala:₹10' }, cost: 151, cals: 3150, protein: 130, carbs: 360, aestheticTip: 'A vibrant fish curry.', notes: '' },
+        { week: 2, day: 'Saturday', breakfast: { name: 'Cornflakes, Milk, 2 Eggs', breakdown: 'Cornflakes:₹15, Milk:₹10, Eggs:₹14' }, lunch: { name: 'Leftover Fish Curry', breakdown: '₹0' }, snack: { name: '2 Boiled Eggs', breakdown: 'Eggs:₹14' }, dinner: { name: 'Chicken Curry (200g) + Rice', breakdown: 'Chicken:₹60, Rice:₹15, Masala:₹10' }, cost: 138, cals: 2950, protein: 155, carbs: 290, aestheticTip: 'Classic comfort.', notes: '' },
+        { week: 2, day: 'Sunday', breakfast: { name: 'PB Toast (4) + 4 Eggs', breakdown: 'Bread:₹10, PB:₹15, Eggs:₹28' }, lunch: { name: 'Leftover Chicken Curry', breakdown: '₹0' }, snack: { name: 'Nut & Banana Shake', breakdown: 'Nuts:₹20, Banana:₹5, Milk:₹10' }, dinner: { name: 'Kadai Paneer (200g) + 4 Roti', breakdown: 'Paneer:₹80, Roti:₹10, Masala:₹10' }, cost: 186, cals: 3200, protein: 130, carbs: 340, aestheticTip: 'Use colorful bell peppers.', notes: '' },
+        { week: 2, day: 'Monday', breakfast: { name: 'Egg Bhurji (4) + 3 Roti', breakdown: 'Eggs:₹28, Roti:₹8, Veggies:₹5' }, lunch: { name: 'Leftover Kadai Paneer', breakdown: '₹0' }, snack: { name: 'Peanut Butter Shake', breakdown: 'PB:₹15, Milk:₹10, Banana:₹5' }, dinner: { name: 'Chicken Bhuna (200g) + 4 Roti', breakdown: 'Chicken:₹60, Roti:₹10, Masala:₹10' }, cost: 151, cals: 3000, protein: 145, carbs: 300, aestheticTip: 'A dry curry looks good.', notes: '' },
+        { week: 2, day: 'Tuesday', breakfast: { name: 'Cornflakes, Milk, 2 Eggs', breakdown: 'Cornflakes:₹15, Milk:₹10, Eggs:₹14' }, lunch: { name: 'Leftover Chicken Bhuna', breakdown: '₹0' }, snack: { name: '2 Boiled Eggs', breakdown: 'Eggs:₹14' }, dinner: { name: 'Rajma Masala (Lg) + Rice', breakdown: 'Rajma:₹20, Rice:₹15, Masala:₹10' }, cost: 98, cals: 2900, protein: 125, carbs: 330, aestheticTip: 'A classic.', notes: '' },
+        { week: 2, day: 'Wednesday', breakfast: { name: 'PB Toast (4) + 4 Eggs', breakdown: 'Bread:₹10, PB:₹15, Eggs:₹28' }, lunch: { name: 'Leftover Rajma', breakdown: '₹0' }, snack: { name: 'Nut & Banana Shake', breakdown: 'Nuts:₹20, Banana:₹5, Milk:₹10' }, dinner: { name: 'Garlic Pepper Chicken (200g)', breakdown: 'Chicken:₹60, Spices:₹10' }, cost: 166, cals: 3050, protein: 150, carbs: 310, aestheticTip: 'Visible pepper flakes.', notes: '' },
+        { week: 2, day: 'Thursday', breakfast: { name: 'Egg Bhurji (4) + 3 Roti', breakdown: 'Eggs:₹28, Roti:₹8, Veggies:₹5' }, lunch: { name: 'Leftover Garlic Chicken', breakdown: '₹0' }, snack: { name: 'Peanut Butter Shake', breakdown: 'PB:₹15, Milk:₹10, Banana:₹5' }, dinner: { name: 'Chole Masala (Lg) + Rice', breakdown: 'Chole:₹20, Rice:₹15, Masala:₹10' }, cost: 121, cals: 3000, protein: 130, carbs: 350, aestheticTip: 'Serve with lemon wedge.', notes: '' },
+        // WEEK 3
+        { week: 3, day: 'Friday', breakfast: { name: 'Cornflakes, Milk, 2 Eggs', breakdown: 'Cornflakes:₹15, Milk:₹10, Eggs:₹14' }, lunch: { name: 'Leftover Chole', breakdown: '₹0' }, snack: { name: '2 Boiled Eggs', breakdown: 'Eggs:₹14' }, dinner: { name: 'Chilli Chicken (Dry, 200g)', breakdown: 'Chicken:₹60, Veggies:₹15, Sauces:₹10' }, cost: 138, cals: 3100, protein: 145, carbs: 320, aestheticTip: 'Garnish with spring onions.', notes: '' },
+        { week: 3, day: 'Saturday', breakfast: { name: 'PB Toast (4) + 4 Eggs', breakdown: 'Bread:₹10, PB:₹15, Eggs:₹28' }, lunch: { name: 'Leftover Chilli Chicken', breakdown: '₹0' }, snack: { name: 'Nut & Banana Shake', breakdown: 'Nuts:₹20, Banana:₹5, Milk:₹10' }, dinner: { name: 'Tawa Paneer Tikka (200g)', breakdown: 'Paneer:₹80, Roti:₹10, Masala:₹10' }, cost: 186, cals: 3250, protein: 140, carbs: 330, aestheticTip: 'Get dark char marks on the paneer.', notes: '' },
+        { week: 3, day: 'Sunday', breakfast: { name: 'Egg Bhurji (4) + 3 Roti', breakdown: 'Eggs:₹28, Roti:₹8, Veggies:₹5' }, lunch: { name: 'Paneer Tikka Wrap (Frankie)', breakdown: '₹0' }, snack: { name: 'Peanut Butter Shake', breakdown: 'PB:₹15, Milk:₹10, Banana:₹5' }, dinner: { name: 'Masala Fish Fry (150g) + Dal', breakdown: 'Fish:₹55, Dal:₹15, Masala:₹10' }, cost: 154, cals: 3000, protein: 135, carbs: 300, aestheticTip: 'Crispy skin is key.', notes: '' },
+        { week: 3, day: 'Monday', breakfast: { name: 'Cornflakes, Milk, 2 Eggs', breakdown: 'Cornflakes:₹15, Milk:₹10, Eggs:₹14' }, lunch: { name: 'Leftover Dal + Rice', breakdown: '₹0' }, snack: { name: '2 Boiled Eggs', breakdown: 'Eggs:₹14' }, dinner: { name: 'Soya Chunk Curry (Lg)', breakdown: 'Soya:₹20, Roti:₹10, Masala:₹10' }, cost: 93, cals: 2900, protein: 125, carbs: 340, aestheticTip: 'A hearty, cheap meal.', notes: '' },
+        { week: 3, day: 'Tuesday', breakfast: { name: 'PB Toast (4) + 4 Eggs', breakdown: 'Bread:₹10, PB:₹15, Eggs:₹28' }, lunch: { name: 'Leftover Soya Curry', breakdown: '₹0' }, snack: { name: 'Nut & Banana Shake', breakdown: 'Nuts:₹20, Banana:₹5, Milk:₹10' }, dinner: { name: 'Chicken Bhuna (200g) + 4 Roti', breakdown: 'Chicken:₹60, Roti:₹10, Masala:₹10' }, cost: 176, cals: 3000, protein: 145, carbs: 300, aestheticTip: 'A dry curry looks good.', notes: '' },
+        { week: 3, day: 'Wednesday', breakfast: { name: 'Egg Bhurji (4) + 3 Roti', breakdown: 'Eggs:₹28, Roti:₹8, Veggies:₹5' }, lunch: { name: 'Leftover Chicken Bhuna', breakdown: '₹0' }, snack: { name: 'Peanut Butter Shake', breakdown: 'PB:₹15, Milk:₹10, Banana:₹5' }, dinner: { name: 'Rajma Masala (Lg) + Rice', breakdown: 'Rajma:₹20, Rice:₹15, Masala:₹10' }, cost: 121, cals: 2950, protein: 125, carbs: 340, aestheticTip: 'Classic comfort.', notes: '' },
+        { week: 3, day: 'Thursday', breakfast: { name: 'Cornflakes, Milk, 2 Eggs', breakdown: 'Cornflakes:₹15, Milk:₹10, Eggs:₹14' }, lunch: { name: 'Leftover Rajma', breakdown: '₹0' }, snack: { name: '2 Boiled Eggs', breakdown: 'Eggs:₹14' }, dinner: { name: 'Chole Masala (Lg) + Rice', breakdown: 'Chole:₹20, Rice:₹15, Masala:₹10' }, cost: 98, cals: 2850, protein: 120, carbs: 320, aestheticTip: 'Garnish with onion rings.', notes: '' },
+        // WEEK 4
+        { week: 4, day: 'Friday', breakfast: { name: 'PB Toast (4) + 4 Eggs', breakdown: 'Bread:₹10, PB:₹15, Eggs:₹28' }, lunch: { name: 'Leftover Chole', breakdown: '₹0' }, snack: { name: 'Nut & Banana Shake', breakdown: 'Nuts:₹20, Banana:₹5, Milk:₹10' }, dinner: { name: 'Chicken Curry (200g) + Rice', breakdown: 'Chicken:₹60, Rice:₹15, Masala:₹10' }, cost: 181, cals: 3050, protein: 150, carbs: 310, aestheticTip: 'A classic comfort meal.', notes: '' },
+        { week: 4, day: 'Saturday', breakfast: { name: 'Egg Bhurji (4) + 3 Roti', breakdown: 'Eggs:₹28, Roti:₹8, Veggies:₹5' }, lunch: { name: 'Leftover Chicken Curry', breakdown: '₹0' }, snack: { name: 'Peanut Butter Shake', breakdown: 'PB:₹15, Milk:₹10, Banana:₹5' }, dinner: { name: 'Mutton Curry (200g)', breakdown: 'Mutton:₹90, Roti:₹10, Masala:₹15' }, cost: 186, cals: 3300, protein: 140, carbs: 320, aestheticTip: 'The Reward! Slow cook for rich color.', notes: 'Use weekly budget surplus!' },
+        { week: 4, day: 'Sunday', breakfast: { name: 'Cornflakes, Milk, 2 Eggs', breakdown: 'Cornflakes:₹15, Milk:₹10, Eggs:₹14' }, lunch: { name: 'Leftover Mutton Curry', breakdown: '₹0' }, snack: { name: '2 Boiled Eggs', breakdown: 'Eggs:₹14' }, dinner: { name: 'Kadai Paneer (200g) + 4 Roti', breakdown: 'Paneer:₹80, Roti:₹10, Masala:₹10' }, cost: 153, cals: 3100, protein: 130, carbs: 330, aestheticTip: 'Use colorful bell peppers.', notes: '' },
+        { week: 4, day: 'Monday', breakfast: { name: 'PB Toast (4) + 4 Eggs', breakdown: 'Bread:₹10, PB:₹15, Eggs:₹28' }, lunch: { name: 'Leftover Kadai Paneer', breakdown: '₹0' }, snack: { name: 'Nut & Banana Shake', breakdown: 'Nuts:₹20, Banana:₹5, Milk:₹10' }, dinner: { name: 'Rajma Masala (Lg) + Rice', breakdown: 'Rajma:₹20, Rice:₹15, Masala:₹10' }, cost: 141, cals: 2950, protein: 125, carbs: 340, aestheticTip: 'Classic comfort.', notes: '' },
+        { week: 4, day: 'Tuesday', breakfast: { name: 'Egg Bhurji (4) + 3 Roti', breakdown: 'Eggs:₹28, Roti:₹8, Veggies:₹5' }, lunch: { name: 'Leftover Rajma', breakdown: '₹0' }, snack: { name: 'Peanut Butter Shake', breakdown: 'PB:₹15, Milk:₹10, Banana:₹5' }, dinner: { name: 'Chicken Bhuna (200g) + 4 Roti', breakdown: 'Chicken:₹60, Roti:₹10, Masala:₹10' }, cost: 151, cals: 3000, protein: 145, carbs: 300, aestheticTip: 'A dry curry looks good.', notes: '' },
+        { week: 4, day: 'Wednesday', breakfast: { name: 'Cornflakes, Milk, 2 Eggs', breakdown: 'Cornflakes:₹15, Milk:₹10, Eggs:₹14' }, lunch: { name: 'Leftover Chicken Bhuna', breakdown: '₹0' }, snack: { name: '2 Boiled Eggs', breakdown: 'Eggs:₹14' }, dinner: { name: 'Chole Masala (Lg) + Rice', breakdown: 'Chole:₹20, Rice:₹15, Masala:₹10' }, cost: 98, cals: 2850, protein: 120, carbs: 320, aestheticTip: 'Garnish with onion rings.', notes: '' },
+        { week: 4, day: 'Thursday', breakfast: { name: 'PB Toast (4) + 4 Eggs', breakdown: 'Bread:₹10, PB:₹15, Eggs:₹28' }, lunch: { name: 'Leftover Chole', breakdown: '₹0' }, snack: { name: 'Nut & Banana Shake', breakdown: 'Nuts:₹20, Banana:₹5, Milk:₹10' }, dinner: { name: 'Egg Curry (4 eggs) + Rice', breakdown: 'Eggs:₹28, Rice:₹15, Masala:₹10' }, cost: 151, cals: 2950, protein: 130, carbs: 310, aestheticTip: 'Slice eggs to show the yolk.', notes: '' }
+    ];
+
+    let mealPlan = [];
+    let activeWeek = 1;
+    let weightData = JSON.parse(localStorage.getItem('weightData_v3.2')) || { labels: [], weights: [] };
+    let checkedItems = JSON.parse(localStorage.getItem('checkedItems_v3.2')) || {};
+    
+    const today = new Date().toLocaleDateString();
+    if (checkedItems.date !== today) {
+        checkedItems = { date: today };
+        localStorage.setItem('checkedItems_v3.2', JSON.stringify(checkedItems));
+    }
+
+    const mealIcons = { breakfast: 'coffee', lunch: 'utensils', snack: 'cookie', dinner: 'soup' };
+
+    function loadPlanFromStorage() {
+        const storedPlan = localStorage.getItem('mealPlan_v3.2');
+        if (storedPlan) {
+            mealPlan = JSON.parse(storedPlan);
+        } else {
+            mealPlan = defaultMealPlan;
+            localStorage.setItem('mealPlan_v3.2', JSON.stringify(mealPlan));
+        }
+    }
+
+    function renderTabs() {
+        const tabsContainer = document.getElementById('tabs-container');
+        tabsContainer.innerHTML = '';
+        for (let i = 1; i <= 4; i++) {
+            const button = document.createElement('button');
+            button.textContent = `Week ${i}`;
+            button.className = `tab-btn px-4 py-2 rounded-lg font-semibold transition-colors duration-200 whitespace-nowrap ${i === activeWeek ? 'tab-active' : 'tab-inactive'}`;
+            button.onclick = () => changeWeek(i);
+            tabsContainer.appendChild(button);
+        }
+    }
+
+    function renderPlan() {
+        const container = document.getElementById('plan-container');
+        container.innerHTML = '';
+        const weekPlan = mealPlan.filter(day => day.week === activeWeek);
+
+        container.innerHTML += createWeeklyBriefing(weekPlan);
+
+        const dailyCardsContainer = document.createElement('div');
+        dailyCardsContainer.className = "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6";
+        
+        weekPlan.forEach((day) => {
+            dailyCardsContainer.innerHTML += createDayCard(day);
+        });
+        container.appendChild(dailyCardsContainer);
+        
+        document.querySelectorAll('.meal-checkbox').forEach(checkbox => checkbox.addEventListener('change', handleCheck));
+        document.querySelectorAll('.details-toggle').forEach(toggle => toggle.addEventListener('click', handleDetailsToggle));
+        lucide.createIcons();
+    }
+
+    function createWeeklyBriefing(weekData) {
+        const totalDays = weekData.length;
+        if (totalDays === 0) return '<div class="card p-6 rounded-lg text-center text-gray-400">No data for this week.</div>';
+        const avgCals = Math.round(weekData.reduce((sum, day) => sum + day.cals, 0) / totalDays);
+        const avgProtein = Math.round(weekData.reduce((sum, day) => sum + day.protein, 0) / totalDays);
+        const avgCost = Math.round(weekData.reduce((sum, day) => sum + day.cost, 0) / totalDays);
+
+        return `
+            <div class="card p-6 rounded-lg border-l-4 border-blue-500">
+                <h3 class="font-bold text-xl text-white mb-4">Week ${activeWeek} Briefing</h3>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
+                    <div><p class="text-sm text-gray-400">Avg. Daily Calories</p><p class="text-2xl font-bold">${avgCals}</p></div>
+                    <div><p class="text-sm text-gray-400">Avg. Daily Protein</p><p class="text-2xl font-bold">${avgProtein}g</p></div>
+                    <div><p class="text-sm text-gray-400">Avg. Daily Cost</p><p class="text-2xl font-bold">₹${avgCost}</p></div>
+                </div>
+            </div>
+        `;
+    }
+
+    function createDayCard(day) {
+        const dayIndex = mealPlan.findIndex(d => d.week === day.week && d.day === day.day);
+        const costPercentage = (day.cost / 150) * 100;
+        
+        let mealItemsHTML = '';
+        ['breakfast', 'lunch', 'snack', 'dinner'].forEach(mealType => {
+            const isAesthetic = mealType === 'dinner';
+            const wrapperClass = isAesthetic ? 'aesthetic-meal pl-3 py-1' : '';
+            mealItemsHTML += `
+                <div class="${wrapperClass}">
+                    ${createMealItem(dayIndex, mealType, day[mealType], isAesthetic)}
+                    ${isAesthetic ? `<p class="text-xs text-amber-500 mt-1 flex items-center"><i data-lucide="sparkles" class="w-3 h-3 mr-1"></i><span contenteditable="true" id="aestheticTip-${dayIndex}">${day.aestheticTip}</span></p>` : ''}
+                </div>
+            `;
+        });
+
+        return `
+            <div class="card p-4 rounded-lg flex flex-col space-y-3">
+                <div class="flex justify-between items-center">
+                    <h3 class="font-bold text-lg text-white">${day.day}</h3>
+                    <button onclick="saveDayPlan(${dayIndex})" class="p-1 text-gray-400 hover:text-white transition-colors" title="Save Changes"><i data-lucide="save" class="w-5 h-5"></i></button>
+                </div>
+                <div class="flex justify-around text-xs text-center border-y border-gray-700 py-2">
+                    <div><p class="font-bold text-blue-400">Cals</p><p id="cals-${dayIndex}" contenteditable="true">${day.cals}</p></div>
+                    <div><p class="font-bold text-green-400">Protein</p><p id="protein-${dayIndex}" contenteditable="true">${day.protein}g</p></div>
+                    <div><p class="font-bold text-yellow-400">Carbs</p><p id="carbs-${dayIndex}" contenteditable="true">${day.carbs}g</p></div>
+                </div>
+                <div class="flex-grow space-y-2 text-sm">${mealItemsHTML}</div>
+                <div class="pt-3 border-t border-gray-700 space-y-2">
+                    <div>
+                        <p class="text-sm text-gray-400">Notes:</p>
+                        <p id="notes-${dayIndex}" contenteditable="true" class="text-xs text-gray-300 mt-1 p-1">${day.notes || ''}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-400">Est. Cost: ₹<span id="cost-${dayIndex}" contenteditable="true">${day.cost}</span></p>
+                        <div class="w-full bg-gray-700 rounded-full h-2.5 mt-2">
+                            <div class="${day.cost > 150 ? 'bg-red-500' : 'bg-green-500'} h-2.5 rounded-full" style="width: ${Math.min(costPercentage, 100)}%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function createMealItem(dayIndex, mealType, mealData, isAesthetic) {
+        const day = mealPlan[dayIndex];
+        const itemId = `w${day.week}d${dayIndex}-${mealType}`;
+        const isChecked = checkedItems[itemId] ? 'checked' : '';
+        const labelClass = checkedItems[itemId] ? 'checked-item' : '';
+        const mealTitleClass = isAesthetic ? 'font-semibold text-amber-400' : 'font-semibold';
+        
+        return `
+            <div>
+                <div class="flex items-start">
+                    <input type="checkbox" id="${itemId}" data-item-id="${itemId}" class="meal-checkbox mt-1 mr-3 h-4 w-4 rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500" ${isChecked}>
+                    <div class="flex-1">
+                        <label for="${itemId}" class="${labelClass} cursor-pointer">
+                            <span class="${mealTitleClass} flex items-center">
+                                <i data-lucide="${mealIcons[mealType]}" class="w-4 h-4 mr-2"></i>
+                                ${mealType.charAt(0).toUpperCase() + mealType.slice(1)}:
+                                <i data-lucide="info" class="details-toggle w-3 h-3 ml-2 text-gray-500 hover:text-white"></i>
+                            </span>
+                            <span id="${mealType}-name-${dayIndex}" class="pl-6 block" contenteditable="true">${mealData.name}</span>
+                        </label>
+                    </div>
+                </div>
+                <div id="${mealType}-breakdown-${dayIndex}" class="budget-breakdown text-xs text-gray-400 ml-9">
+                    <span contenteditable="true">${mealData.breakdown}</span>
+                </div>
+            </div>
+        `;
+    }
+
+    function saveDayPlan(dayIndex) {
+        const day = mealPlan[dayIndex];
+        
+        ['breakfast', 'lunch', 'snack', 'dinner'].forEach(mealType => {
+            day[mealType].name = document.getElementById(`${mealType}-name-${dayIndex}`).textContent;
+            day[mealType].breakdown = document.querySelector(`#${mealType}-breakdown-${dayIndex} span`).textContent;
+        });
+
+        day.cost = parseInt(document.getElementById(`cost-${dayIndex}`).textContent, 10) || 0;
+        day.cals = parseInt(document.getElementById(`cals-${dayIndex}`).textContent, 10) || 0;
+        day.protein = parseInt(document.getElementById(`protein-${dayIndex}`).textContent.replace('g', ''), 10) || 0;
+        day.carbs = parseInt(document.getElementById(`carbs-${dayIndex}`).textContent.replace('g', ''), 10) || 0;
+        day.notes = document.getElementById(`notes-${dayIndex}`).textContent;
+        day.aestheticTip = document.getElementById(`aestheticTip-${dayIndex}`)?.textContent || day.aestheticTip;
+
+        localStorage.setItem('mealPlan_v3.2', JSON.stringify(mealPlan));
+        updateBudget();
+        renderPlan();
+        
+        const saveButton = document.querySelector(`button[onclick="saveDayPlan(${dayIndex})"]`);
+        saveButton.innerHTML = `<i data-lucide="check" class="w-5 h-5 text-green-400"></i>`;
+        lucide.createIcons();
+        setTimeout(() => {
+            saveButton.innerHTML = `<i data-lucide="save" class="w-5 h-5"></i>`;
+            lucide.createIcons();
+        }, 1500);
+    }
+
+    function updateBudget() {
+        const totalSpent = mealPlan.reduce((acc, day) => acc + (day.cost || 0), 0);
+        const totalBudget = mealPlan.length * 150;
+        const surplus = totalBudget - totalSpent;
+        const surplusEl = document.getElementById('monthly-surplus');
+        surplusEl.textContent = `₹${Math.round(surplus)}`;
+        surplusEl.className = `text-2xl font-bold ${surplus >= 0 ? 'text-green-400' : 'text-red-400'}`;
+    }
+
+    let weightChart;
+    function renderChart() {
+        const ctx = document.getElementById('weightChart').getContext('2d');
+        if (weightChart) weightChart.destroy();
+        weightChart = new Chart(ctx, {
+            type: 'line',
+            data: { labels: weightData.labels, datasets: [{ label: 'Weight (kg)', data: weightData.weights, borderColor: '#2563eb', backgroundColor: 'rgba(37, 99, 235, 0.1)', fill: true, tension: 0.2, borderWidth: 2, pointBackgroundColor: '#2563eb', pointRadius: 4, pointHoverRadius: 6 }] },
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: false, grid: { color: '#374151' }, ticks: { color: '#9ca3af' } }, x: { grid: { display: false }, ticks: { color: '#9ca3af' } } }, plugins: { legend: { display: false } } }
+        });
+    }
+
+    function changeWeek(weekNum) {
+        activeWeek = weekNum;
+        renderTabs();
+        renderPlan();
+    }
+
+    function handleCheck(event) {
+        const itemId = event.target.dataset.itemId;
+        checkedItems[itemId] = event.target.checked;
+        if (!event.target.checked) delete checkedItems[itemId];
+        localStorage.setItem('checkedItems_v3.2', JSON.stringify(checkedItems));
+        renderPlan();
+    }
+    
+    function logWeight() {
+        const weightInput = document.getElementById('weight-input');
+        const newWeight = parseFloat(weightInput.value);
+        if (newWeight && newWeight > 30) {
+            const todayLabel = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+            const todayIndex = weightData.labels.indexOf(todayLabel);
+            if (todayIndex > -1) {
+                 weightData.weights[todayIndex] = newWeight;
+            } else {
+                 weightData.labels.push(todayLabel);
+                 weightData.weights.push(newWeight);
+            }
+            localStorage.setItem('weightData_v3.2', JSON.stringify(weightData));
+            weightInput.value = '';
+            renderChart();
+        }
+    }
+
+    function handleDetailsToggle(event) {
+        const container = event.target.closest('label').parentElement.parentElement.querySelector('.budget-breakdown');
+        container.style.display = container.style.display === 'block' ? 'none' : 'block';
+    }
+
+    function showResetModal() { document.getElementById('reset-modal').classList.remove('hidden'); }
+    function hideResetModal() { document.getElementById('reset-modal').classList.add('hidden'); }
+    function executeReset() {
+        localStorage.removeItem('mealPlan_v3.2');
+        localStorage.removeItem('weightData_v3.2');
+        localStorage.removeItem('checkedItems_v3.2');
+        window.location.reload();
+    }
+    
+    window.onload = () => {
+        loadPlanFromStorage();
+        renderTabs();
+        renderPlan();
+        updateBudget();
+        renderChart();
+    };
+    </script>
+</body>
+</html>
